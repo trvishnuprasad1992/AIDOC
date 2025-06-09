@@ -2,7 +2,9 @@ import 'dart:developer';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:vertexaitesting/auto_fill.dart';
+import 'package:vertexaitesting/provider/ai_provider.dart';
 import 'package:vertexaitesting/vertexai.dart';
 
 Future<void> main() async {
@@ -26,7 +28,11 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: AutoFillFormScreen(),
+      home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (context)=>DocumentAIProvider())
+          ],
+          child: AutoFillFormScreen()),
     );
   }
 }

@@ -1,21 +1,29 @@
+import 'dart:developer';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
+import 'package:provider/provider.dart';
 import 'dart:io';
 import 'dart:convert';
 
-class DocumentScannerWidget extends StatefulWidget {
-  final Function(Map<String, String>) onDataExtracted;
+import 'package:vertexaitesting/provider/ai_provider.dart';
 
-  const DocumentScannerWidget({Key? key, required this.onDataExtracted}) : super(key: key);
+class DocumentScannerWidget extends StatefulWidget {
+  final Function(Map<String, dynamic>) onDataExtracted;
+
+  const DocumentScannerWidget({Key? key, required this.onDataExtracted})
+      : super(key: key);
 
   @override
   State<DocumentScannerWidget> createState() => _DocumentScannerWidgetState();
 }
 
 class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
-  final ImagePicker _picker = ImagePicker();
+  ImagePicker _picker = ImagePicker();
   File? _selectedImage;
   bool _isProcessing = false;
   String _status = '';
@@ -34,8 +42,7 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
 
   void _initializeModel() {
     // Initialize the Vertex AI model
-    _model =
-    FirebaseAI.googleAI().generativeModel(model: 'gemini-2.0-flash');
+    _model = FirebaseAI.googleAI().generativeModel(model: 'gemini-2.0-flash');
   }
 
   @override
@@ -55,7 +62,7 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
       if (image != null) {
         setState(() {
           _selectedImage = File(image.path);
-          _status = 'Image captured, processing...';
+          _status = 'PDF captured, processing...';
         });
         await _processDocument();
       }
@@ -66,16 +73,14 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
     }
   }
 
-  Future<void> _selectFromGallery() async {
+  Future<void> _selectFromGallery(BuildContext context) async {
     try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
+      FilePickerResult? result = await FilePicker.platform.pickFiles();
 
-      if (image != null) {
+      if (result != null) {
         setState(() {
-          _selectedImage = File(image.path);
+          _selectedImage =  File(result.files.single.path!);
+          context.read<DocumentAIProvider>().getDocumentPath(result.files.single.path!??"");
           _status = 'Image selected, processing...';
         });
         await _processDocument();
@@ -86,6 +91,8 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
       });
     }
   }
+
+
 
   Future<void> _processDocument() async {
     if (_selectedImage == null) return;
@@ -107,7 +114,6 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
         _status = 'Data extraction completed!';
         _isProcessing = false;
       });
-
     } catch (e) {
       setState(() {
         _status = 'Processing error: $e';
@@ -116,7 +122,7 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
     }
   }
 
-  Future<Map<String, String>> _processImageDirectly() async {
+  Future<Map<String, dynamic>> _processImageDirectly() async {
     setState(() {
       _status = 'Analyzing document with AI...';
     });
@@ -126,28 +132,78 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
 
     // Create the prompt for document data extraction
     const prompt = '''
-    Analyze this document image and extract the following information. Return the result as a clean JSON object with these exact keys:
+    "Extract all key-value pairs from the provided PDF document based on the following JSON structure. For each field, identify the corresponding text in the document and populate its value.
 
-    {
-      "name": "full name if found",
-      "email": "email address if found", 
-      "phone": "phone number if found",
-      "address": "complete address if found",
-      "date_of_birth": "date of birth if found",
-      "id_number": "any ID/document numbers if found",
-      "organization": "company/organization name if found",
-      "position": "job title/position if found"
-    }
-
-    Rules:
-    - Only include fields that you can clearly identify in the document
-    - Use empty string "" for fields not found
-    - Format phone numbers consistently
-    - Format dates as YYYY-MM-DD if possible
-    - Return only the JSON object, no additional text
+     Extraction Rules:
+     
+     company_details:
+     company_name: Extract the primary company name located at the top-left/top-right.
+     headquarters: second line after company_name.
+     address: Capture the complete geographical address associated with the company.
+     phone_numbers: Extract all listed phone numbers, including landline and mobile.
+     mobile_number: Specifically identify the mobile number if distinct from general phone numbers.
+     customer_details:
+     customer_name: Find the name of the "Motors Industry" entity.
+     customer_address: Extract the address associated with the customer.
+     customer_phone: Get the telephone number for the customer.
+     customer_fax: Extract the fax number if present.
+     customer_email: Extract the email address if present.
+     document_details:
+     document_type: Identify the main title indicating the nature of the document.
+     voucher_no: Extract the invoice number/ voucher number.
+     date: Extract the "Date" in YYYY-MM-DD format.
+     booking_no: Extract the "Booking No." value if present.
+     booking_date: Extract the "Booking Date" if present.
+     payment_details:
+     payment_mode: Extract the "PAYMENT MODE".
+     currency: Extract the "CURRENCY".
+     conversion_rate: Extract the "Conv Rate" value.
+     item_details:
+     For each row in the item table:
+     sr_no: Extract the serial number.
+     item_code: Extract the item code.
+     description: Extract the full item description/name.
+     quantity: Extract the quantity.
+     unit: Extract the unit of measurement.
+     unit_price: Extract the unit price/rate.
+     total: Extract the total for the item.
+     summary_amounts:
+     advance_amount_paid_null_fs_no:
+     amount: Extract the numerical value for the "Advance amount paid on null with FS No.".
+     fs_no: Extract the FS No. associated with the advance amount.
+     advance_payment: Extract the "Advance Payment" value.
+     last_payment: Extract the "Last Payment" value.
+     invoice_value: Extract the "Invoice Value".
+     loyalty_discount: Extract the "Loyalty Discount" value.
+     point_redemption: Extract the "Point Redumption" value.
+     discount: Extract the "Discount" value.
+     sub_total: Extract the sub total/total value.
+     excise_tax: Extract the "Excise Tax" value.
+     vat: Extract the "VAT" value if it empty put "0".
+     withholding: Extract the "With-Holding" value if it empty put "0".
+     grand_total: Extract the "Grand Total/Total" value.
+     worded_amount: Extract the amount spelled out in words.
+     Preparation/Approval Details:
+     prepared_by: Extract the name next to "Prepared By".
+     prepared_date: Extract the date and time next to "Prepared Date" in YYYY-MM-DD HH:MM:SS format.
+     checked_by: Extract the name next to "Checked By".
+     checked_date: Extract the date next to "Checked Date" if present.
+     approved_by: Extract the name next to "Approved By".
+     approved_date: Extract the date and time next to "Approved Date" in YYYY-MM-DD HH:MM:SS format.
+     Page Number: Extract the page number information (e.g., "Page 1/1").
+     Output Format:
+     
+     Output Format:
+     Give opening and closing quotes for all the tags and values.
+     Return the extracted information as a JSON object, strictly following the provided structure.
+     Ensure all monetary values are extracted as numerical strings (e.g., "2,331,516.09").
+     Dates should be formatted as "YYYY-MM-DD" and datetimes as "YYYY-MM-DD HH:MM:SS".
+     If a field is not found in the document, populate its value with an empty string "" or an empty array [] for lists, as appropriate.
+      
+      
     ''';
 
-    final imagePart = InlineDataPart("image/png", imageBytes);
+    final imagePart = InlineDataPart("application/pdf", imageBytes);
     try {
       final response = await _model.generateContent([
         Content.multi([
@@ -159,7 +215,7 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
       final responseText = response.text?.trim() ?? '';
 
       // Try to parse as JSON
-      Map<String, String> extractedData = {};
+      Map<String, dynamic> extractedData = {};
 
       try {
         // Remove any markdown formatting if present
@@ -171,81 +227,20 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
           cleanJson = cleanJson.substring(0, cleanJson.length - 3);
         }
         cleanJson = cleanJson.trim();
-
-        final parsed = jsonDecode(cleanJson);
-        extractedData = Map<String, String>.from(
-            parsed.map((key, value) => MapEntry(key.toString(), value.toString()))
-        );
-
-        // Remove empty values
-        extractedData.removeWhere((key, value) => value.isEmpty);
-
+        Map<String,dynamic> parsed = jsonDecode(cleanJson);
+        extractedData = parsed;
       } catch (e) {
-        // Fallback: parse manually if JSON parsing fails
-        extractedData = _parseResponseManually(responseText);
+        log("Exception $e");
+
       }
 
       return extractedData;
-
     } catch (e) {
       throw Exception('Vertex AI processing failed: $e');
     }
   }
 
 
-
-  Map<String, String> _parseJsonResponse(String responseText) {
-    try {
-      // Clean up the response
-      String cleanJson = responseText;
-      if (cleanJson.startsWith('```json')) {
-        cleanJson = cleanJson.substring(7);
-      }
-      if (cleanJson.endsWith('```')) {
-        cleanJson = cleanJson.substring(0, cleanJson.length - 3);
-      }
-      cleanJson = cleanJson.trim();
-
-      final parsed = jsonDecode(cleanJson);
-      final result = Map<String, String>.from(
-          parsed.map((key, value) => MapEntry(key.toString(), value?.toString() ?? ''))
-      );
-
-      // Remove empty values
-      result.removeWhere((key, value) => value.isEmpty || value == 'null');
-
-      return result;
-
-    } catch (e) {
-      return _parseResponseManually(responseText);
-    }
-  }
-
-  Map<String, String> _parseResponseManually(String text) {
-    final Map<String, String> result = {};
-    final lines = text.split('\n');
-
-    for (String line in lines) {
-      line = line.trim();
-      if (line.contains(':')) {
-        final colonIndex = line.indexOf(':');
-        final key = line.substring(0, colonIndex).trim()
-            .replaceAll('"', '')
-            .replaceAll('*', '')
-            .toLowerCase()
-            .replaceAll(' ', '_');
-        final value = line.substring(colonIndex + 1).trim()
-            .replaceAll('"', '')
-            .replaceAll(',', '');
-
-        if (value.isNotEmpty && value != 'null' && value != 'not found') {
-          result[key] = value;
-        }
-      }
-    }
-
-    return result;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -264,43 +259,26 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
                 ),
                 const SizedBox(height: 16),
 
-                if (_selectedImage != null) ...[
-                  Container(
-                    height: 200,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        _selectedImage!,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
                 Row(
                   children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _isProcessing ? null : _captureDocument,
-                        icon: const Icon(Icons.camera_alt),
-                        label: const Text('Take Photo'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
+                    // Expanded(
+                    //   child: ElevatedButton.icon(
+                    //     onPressed: _isProcessing ? null : _captureDocument,
+                    //     icon: const Icon(Icons.camera_alt),
+                    //     label: const Text('Take Photo'),
+                    //     style: ElevatedButton.styleFrom(
+                    //       padding: const EdgeInsets.symmetric(vertical: 12),
+                    //     ),
+                    //   ),
+                    // ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: _isProcessing ? null : _selectFromGallery,
-                        icon: const Icon(Icons.photo_library),
-                        label: const Text('From Gallery'),
+                        onPressed: _isProcessing ? null :(){
+                          _selectFromGallery(context);
+                        },
+                        icon: const Icon(Icons.file_copy_outlined),
+                        label: const Text('From Files'),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
@@ -308,24 +286,24 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
                     ),
                   ],
                 ),
-
                 if (_isProcessing) ...[
                   const SizedBox(height: 20),
                   const Center(child: CircularProgressIndicator()),
                 ],
-
                 if (_status.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: _status.contains('error') || _status.contains('Error')
-                          ? Colors.red[50]
-                          : Colors.blue[50],
+                      color:
+                          _status.contains('error') || _status.contains('Error')
+                              ? Colors.red[50]
+                              : Colors.blue[50],
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: _status.contains('error') || _status.contains('Error')
+                        color: _status.contains('error') ||
+                                _status.contains('Error')
                             ? Colors.red[200]!
                             : Colors.blue[200]!,
                       ),
@@ -333,7 +311,8 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
                     child: Text(
                       _status,
                       style: TextStyle(
-                        color: _status.contains('error') || _status.contains('Error')
+                        color: _status.contains('error') ||
+                                _status.contains('Error')
                             ? Colors.red[700]
                             : Colors.blue[700],
                         fontWeight: FontWeight.w500,
@@ -345,7 +324,9 @@ class _DocumentScannerWidgetState extends State<DocumentScannerWidget> {
             ),
           ),
         ),
-      ],
+
+        ]
+
     );
   }
 }
