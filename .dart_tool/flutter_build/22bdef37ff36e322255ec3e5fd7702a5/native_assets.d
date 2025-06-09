@@ -1,0 +1,1 @@
+ F:\\vishnu\\save_location\\vertexaitesting\\.dart_tool\\flutter_build\\22bdef37ff36e322255ec3e5fd7702a5\\native_assets.yaml: 

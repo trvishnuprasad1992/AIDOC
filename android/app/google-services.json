@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "255513510560",
+    "project_id": "chatapp-55427",
+    "storage_bucket": "chatapp-55427.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:255513510560:android:2105c8c2ceb02ab9fc3fc5",
+        "android_client_info": {
+          "package_name": "com.example.vertexaitesting"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDlP4YYgQpKsw8FRxqeYy1iDKH8Xo8_0Nc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
